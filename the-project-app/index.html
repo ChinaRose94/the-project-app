@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE PROJECT - VR SYSTEM</title>
+    <style>
+        /*
+        ==========================================================================
+        FONTS & BASE STYLES
+        ==========================================================================
+        */
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=VT323&display=swap');
+
+        :root {
+            --color-bg: #000;
+            --color-text-primary: #00ff41;
+            --color-text-secondary: #00c732;
+            --color-accent: #ffaa00;
+            --color-warning: #ff4400;
+            --color-border: #00ff41;
+            --font-primary: 'VT323', monospace;
+            --font-secondary: 'Courier Prime', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden; /* Prevent scrollbars on the body itself */
+        }
+
+        body {
+            font-family: var(--font-secondary);
+            background: var(--color-bg);
+            color: var(--color-text-primary);
+        }
+
+        /*
+        ==========================================================================
+        CRT & SCREEN EFFECTS
+        ==========================================================================
+        */
+
+        #app-container {
+            width: 100%;
+            height: 100%;
+            padding: 10px; /* A small padding for smaller screens */
+            background: var(--color-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .crt-container {
+            width: 100%;
+            height: 100%;
+            background: #080808;
+            border: 5px solid #333;
+            border-radius: 15px;
+            box-shadow: 
+                inset 0 0 25px rgba(0, 255, 0, 0.1),
+                0 0 50px rgba(0, 255, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                transparent 0%,
+                rgba(0, 255, 0, 0.03) 50%,
+                transparent 100%
+            );
+            background-size: 100% 3px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .static-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><defs><filter id="noise"><feTurbulence baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/></filter></defs><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.05"/></svg>');
+            pointer-events: none;
+            opacity: 0;
+            z-index: 999;
+            transition: opacity 0.3s;
+        }
+
+        .static-overlay.active {
+            opacity: 1;
+        }
+
+        /*
+        ==========================================================================
+        SCREEN MANAGEMENT & LAYOUT
+        ==========================================================================
+        */
+
+        .screen {
+            display: none;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* Boot screen */
+        #boot-screen {
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .boot-text {
+            text-align: center;
+            font-size: 1.2rem;
+            line-height: 1.8;
+            font-family: var(--font-primary);
+        }
+
+        .boot-line {
+            animation: flicker 2s infinite;
+            margin-bottom: 10px;
+        }
+
+        .boot-line:nth-child(odd) {
+            animation-delay: 0.5s;
+        }
+        
+        #enter-prompt {
+            animation: flicker 2s infinite, pulse 2s infinite;
+        }
+
+        .status-active {
+            color: var(--color-text-primary);
+            text-shadow: 0 0 10px var(--color-text-primary);
+        }
+
+        .loading-bar {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 300px;
+            height: 20px;
+            border: 2px solid var(--color-border);
+            background: #000;
+        }
+
+        .loading-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-text-primary), var(--color-text-secondary));
+            width: 0%;
+            animation: loading 3s ease-in-out forwards;
+        }
+
+        /* Main Hub Layout */
+        .system-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 2px solid var(--color-border);
+            background: rgba(0, 255, 0, 0.05);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .system-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px var(--color-text-primary);
+            font-family: var(--font-primary);
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            animation: pulse 2s infinite;
+            color: var(--color-text-primary);
+            text-shadow: 0 0 10px var(--color-text-primary);
+        }
+
+        .frequency-display {
+            text-align: right;
+            font-size: 1rem;
+        }
+
+        .warning-display {
+            color: var(--color-warning);
+            font-size: 0.8rem;
+            min-height: 20px;
+        }
+
+        .warning-display.active {
+            animation: flash 0.5s infinite;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto; /* Allow content to scroll */
+            padding: 20px;
+        }
+
+        .system-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-top: 2px solid var(--color-border);
+            background: rgba(0, 255, 0, 0.05);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .audio-controls, .emergency-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .network-security {
+            font-size: 0.8rem;
+            color: var(--color-text-secondary);
+        }
+        .network-security .secure {
+            color: var(--color-text-primary);
+        }
+        .network-security .insecure {
+            color: var(--color-warning);
+            animation: flash 1s infinite;
+        }
+
+        /*
+        ==========================================================================
+        UI COMPONENTS
+        ==========================================================================
+        */
+
+        /* Navigation */
+        .nav-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--color-border);
+            background: rgba(0, 255, 0, 0.05);
+            flex-shrink: 0;
+            overflow-x: auto; /* Allow tabs to scroll on small screens */
+        }
+
+        .nav-tab {
+            background: none;
+            border: none;
+            color: var(--color-text-secondary);
+            padding: 15px 20px;
+            cursor: pointer;
+            font-family: var(--font-secondary);
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            border-right: 1px solid var(--color-border);
+            white-space: nowrap;
+        }
+
+        .nav-tab:hover {
+            background: rgba(0, 255, 0, 0.1);
+            color: var(--color-text-primary);
+        }
+
+        .nav-tab.active {
+            background: rgba(0, 255, 0, 0.2);
+            color: var(--color-text-primary);
+            text-shadow: 0 0 5px var(--color-text-primary);
+        }
+
+        /* Tab Panels */
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: var(--color-text-primary);
+            text-shadow: 0 0 10px var(--color-text-primary);
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 10px;
+            font-family: var(--font-primary);
+        }
+
+        /* Grids */
+        .location-grid, .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        /* Cards */
+        .location-card, .character-card {
+            border: 2px solid var(--color-text-secondary);
+            padding: 20px;
+            background: rgba(0, 255, 0, 0.05);
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .location-card:hover, .character-card:hover {
+            border-color: var(--color-text-primary);
+            background: rgba(0, 255, 0, 0.1);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+        }
+
+        .location-card h3, .character-card h3 {
+            color: var(--color-text-primary);
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+            font-family: var(--font-primary);
+        }
+
+        .location-card p {
+            color: var(--color-text-secondary);
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+
+        .location-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .feature-tag {
+            background: rgba(0, 255, 0, 0.2);
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            border: 1px solid var(--color-text-secondary);
+        }
+
+        .location-missions {
+            font-size: 0.8rem;
+            color: var(--color-text-secondary);
+        }
+
+        .interactive-marker {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: var(--color-accent);
+            font-size: 1.5rem;
+            animation: bounce 2s infinite;
+        }
+
+        .character-card {
+            text-align: center;
+        }
+        
+        .character-avatar {
+            width: 80px;
+            height: 80px;
+            border: 2px solid var(--color-text-primary);
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: rgba(0, 255, 0, 0.1);
+        }
+        
+        .character-card.person-of-interest .character-avatar {
+            border-color: var(--color-warning);
+        }
+
+        .character-role {
+            color: var(--color-text-secondary);
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+        
+        .character-role.person-of-interest {
+            color: var(--color-warning);
+            text-shadow: 0 0 5px var(--color-warning);
+        }
+
+        .character-skills {
+            font-size: 0.9rem;
+            color: var(--color-text-secondary);
+        }
+
+        /* Lists */
+        .equipment-list, .mission-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .equipment-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid var(--color-text-secondary);
+            background: rgba(0, 255, 0, 0.05);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .equipment-name {
+            font-size: 1.1rem;
+            color: var(--color-text-primary);
+        }
+
+        .equipment-status {
+            font-size: 1rem;
+            color: var(--color-text-secondary);
+        }
+
+        .equipment-description {
+            font-size: 0.9rem;
+            color: var(--color-text-secondary);
+            margin-top: 5px;
+            width: 100%;
+        }
+
+        .mission-item {
+            padding: 15px;
+            border: 1px solid var(--color-text-secondary);
+            background: rgba(0, 255, 0, 0.05);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .mission-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .mission-item:before {
+            content: "►";
+            color: var(--color-accent);
+            position: absolute;
+            left: 15px;
+            top: 18px;
+        }
+        
+        .mission-item-title {
+            padding-left: 25px;
+        }
+
+        /* Buttons */
+        .btn {
+            background: none;
+            border: 2px solid var(--color-text-secondary);
+            color: var(--color-text-secondary);
+            padding: 10px 15px;
+            cursor: pointer;
+            font-family: var(--font-secondary);
+            font-size: 0.8rem;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn:hover {
+            border-color: var(--color-text-primary);
+            color: var(--color-text-primary);
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+
+        .btn.warning {
+            border-color: var(--color-warning);
+            color: var(--color-warning);
+        }
+
+        .btn.warning:hover {
+            border-color: #ff6600;
+            color: #ff6600;
+            box-shadow: 0 0 10px rgba(255, 68, 0, 0.3);
+        }
+
+        .gemini-btn {
+            border-color: var(--color-accent);
+            color: var(--color-accent);
+            animation: pulse 3s infinite;
+        }
+        .gemini-btn:hover {
+            box-shadow: 0 0 15px var(--color-accent);
+        }
+        .gemini-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            animation: none;
+        }
+        
+        /*
+        ==========================================================================
+        GEMINI API & GENERATED CONTENT
+        ==========================================================================
+        */
+        .generated-content-container {
+            border: 1px dashed var(--color-text-secondary);
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0, 255, 0, 0.03);
+            min-height: 50px;
+        }
+        
+        .generated-content-container h4 {
+            font-family: var(--font-primary);
+            color: var(--color-accent);
+            margin-bottom: 10px;
+        }
+
+        .generated-content {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            color: var(--color-text-secondary);
+        }
+
+        .generated-content .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background-color: var(--color-text-primary);
+            animation: blink 1s step-end infinite;
+        }
+        
+        /*
+        ==========================================================================
+        LOGS TAB
+        ==========================================================================
+        */
+
+        .log-entry {
+            border-left: 3px solid var(--color-text-secondary);
+            padding-left: 15px;
+            margin-bottom: 20px;
+        }
+        .log-entry-header {
+            color: var(--color-text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+        .log-entry-content {
+            font-family: var(--font-secondary);
+            white-space: pre-wrap;
+        }
+
+
+        /*
+        ==========================================================================
+        DETAIL VIEW SCREENS
+        ==========================================================================
+        */
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 2px solid var(--color-border);
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .detail-header h1 {
+            font-size: 1.8rem;
+            font-family: var(--font-primary);
+            flex-grow: 1;
+            text-align: center;
+        }
+
+        .detail-content-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* Location View */
+        .location-display {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .location-wireframe {
+            height: 300px;
+            border: 2px solid var(--color-border);
+            position: relative;
+            background: rgba(0, 255, 0, 0.02);
+        }
+
+        .wireframe-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 255, 0, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 0, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .location-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            color: var(--color-text-primary);
+            text-shadow: 0 0 20px var(--color-text-primary);
+        }
+
+        .location-info {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        
+        .location-description, .location-missions {
+            font-size: 1rem;
+        }
+
+        /* Character View */
+        .character-display {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .character-display .character-avatar {
+            width: 150px;
+            height: 150px;
+            font-size: 80px;
+        }
+
+        .character-info h3 {
+            color: var(--color-text-primary);
+            margin-bottom: 10px;
+            font-family: var(--font-primary);
+        }
+
+        .character-info p {
+            color: var(--color-text-secondary);
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        /*
+        ==========================================================================
+        MODAL DIALOG
+        ==========================================================================
+        */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-dialog {
+            background: #080808;
+            border: 2px solid var(--color-warning);
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 0 30px var(--color-warning);
+            max-width: 500px;
+        }
+
+        .modal-dialog h2 {
+            font-family: var(--font-primary);
+            color: var(--color-warning);
+            margin-bottom: 20px;
+        }
+
+        .modal-dialog p {
+            margin-bottom: 30px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+
+        /*
+        ==========================================================================
+        ANIMATIONS
+        ==========================================================================
+        */
+        @keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+        @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes loading { from { width: 0%; } to { width: 100%; } }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes blink { 50% { background-color: transparent; } }
+
+        /*
+        ==========================================================================
+        RESPONSIVE DESIGN
+        ==========================================================================
+        */
+        @media (min-width: 768px) {
+            #app-container {
+                padding: 20px;
+            }
+            .location-info {
+                grid-template-columns: 1fr 1fr;
+            }
+            .character-display {
+                grid-template-columns: 200px 1fr;
+                text-align: left;
+            }
+            .character-display .character-avatar {
+                margin: 0;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .system-title {
+                font-size: 1.2rem;
+            }
+            .nav-tab {
+                padding: 10px 15px;
+                font-size: 0.8rem;
+            }
+            .btn {
+                padding: 8px 12px;
+                font-size: 0.7rem;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <div class="crt-container">
+            <div id="boot-screen" class="screen active">
+                <div class="boot-text">
+                    <div class="boot-line">THE PROJECT VR SYSTEM v1.0</div>
+                    <div class="boot-line">INITIALIZING...</div>
+                    <div class="boot-line">LOADING VIRTUAL ENVIRONMENT...</div>
+                    <div class="boot-line">FREQUENCY: 960 MHz</div>
+                    <div class="boot-line">STATUS: <span class="status-active">ACTIVE</span></div>
+                    <div class="boot-line" id="enter-prompt" style="display:none;">PRESS ENTER OR TAP SCREEN TO CONTINUE</div>
+                </div>
+                <div class="loading-bar">
+                    <div class="loading-fill"></div>
+                </div>
+            </div>
+
+            <div id="main-hub" class="screen">
+                <header class="system-header">
+                    <div class="system-info">
+                        <div class="system-title">THE PROJECT - VR</div>
+                        <div class="system-status">
+                            <span class="status-indicator">●</span>
+                            <span>SYSTEM ACTIVE</span>
+                        </div>
+                    </div>
+                    <div class="frequency-display">
+                        <div>FREQ: <span id="frequency">960.0</span> MHz</div>
+                        <div class="warning-display" id="warning-display"></div>
+                    </div>
+                </header>
+
+                <main class="main-content">
+                    <nav class="nav-tabs">
+                        <button class="nav-tab active" data-tab="locations">LOCATIONS</button>
+                        <button class="nav-tab" data-tab="characters">CHARACTERS</button>
+                        <button class="nav-tab" data-tab="equipment">EQUIPMENT</button>
+                        <button class="nav-tab" data-tab="missions">MISSIONS</button>
+                        <button class="nav-tab" data-tab="logs">LOGS</button>
+                    </nav>
+
+                    <div class="tab-content">
+                        <div id="locations-tab" class="tab-panel active">
+                            <h2 class="section-title">VIRTUAL LOCATIONS</h2>
+                            <div class="location-grid" id="location-grid"></div>
+                        </div>
+
+                        <div id="characters-tab" class="tab-panel">
+                            <h2 class="section-title">TEAM & PERSONS OF INTEREST</h2>
+                            <div class="character-grid" id="character-grid"></div>
+                        </div>
+
+                        <div id="equipment-tab" class="tab-panel">
+                            <h2 class="section-title">SYSTEM DIAGNOSTICS</h2>
+                            <div class="equipment-list" id="equipment-list"></div>
+                        </div>
+
+                        <div id="missions-tab" class="tab-panel">
+                            <h2 class="section-title">MISSION OBJECTIVES</h2>
+                            <div class="mission-list" id="mission-list"></div>
+                        </div>
+
+                        <div id="logs-tab" class="tab-panel">
+                            <h2 class="section-title">SYSTEM LOGS & RECOVERED DATA</h2>
+                            <div id="journal-log-container">
+                                <h3>DR. STEVENS'S JOURNAL (RECOVERED FRAGMENTS)</h3>
+                                <div id="journal-log-content"></div>
+                                <button class="btn gemini-btn" id="generate-journal-btn">✨ SEARCH FOR MORE FRAGMENTS</button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <footer class="system-footer">
+                    <div class="audio-controls">
+                        <a href="https://lilyrosslyn.notion.site/The-Project-OST-1f6cb41c48d380e2929fdcf47c8bbfad" target="_blank" class="btn" id="music-toggle">♪ DEREK'S SOUNDTRACK</a>
+                    </div>
+                    <div class="network-security" id="network-security-display">
+                        NETWORK: <span class="secure">SECURE</span>
+                    </div>
+                    <div class="emergency-controls">
+                        <button class="btn" id="calibrate-btn">CALIBRATE</button>
+                        <button class="btn warning" id="emergency-btn">EMERGENCY</button>
+                    </div>
+                </footer>
+            </div>
+
+            <div id="location-view" class="screen">
+                 <header class="detail-header">
+                    <button class="btn" id="back-btn-location">← BACK</button>
+                    <h1 id="location-title">LOADING...</h1>
+                </header>
+                <div class="detail-content-wrapper">
+                    <div class="location-display">
+                        <div class="location-wireframe">
+                            <div class="wireframe-grid"></div>
+                            <div class="location-content" id="location-content-symbol"></div>
+                        </div>
+                        <div class="location-info">
+                            <p id="location-description"></p>
+                            <div id="location-missions-list"></div>
+                        </div>
+                        <button class="btn gemini-btn" id="scan-anomaly-btn">✨ SCAN FOR ANOMALIES</button>
+                        <div class="generated-content-container" id="anomaly-report-container" style="display:none;">
+                            <h4>SYSTEM ANOMALY REPORT</h4>
+                            <div id="anomaly-log-content"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="character-view" class="screen">
+                <header class="detail-header">
+                    <button class="btn" id="back-btn-char">← BACK</button>
+                    <h1 id="character-name">LOADING...</h1>
+                </header>
+                <div class="detail-content-wrapper">
+                    <div class="character-display">
+                        <div class="character-avatar" id="character-avatar-view"></div>
+                        <div class="character-info">
+                            <h2 id="character-role-view"></h2>
+                            <p id="character-description-view"></p>
+                            <div id="character-skills-view"></div>
+                            <div id="character-backstory-view"></div>
+                            <button class="btn gemini-btn" id="generate-dialogue-btn">✨ GENERATE COMMS</button>
+                            <div class="generated-content-container" id="dialogue-container" style="display:none;">
+                                <h4>COMMUNICATION LOG</h4>
+                                <p class="generated-content" id="dialogue-content"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="scanlines"></div>
+            <div class="static-overlay" id="static-overlay"></div>
+        </div>
+    </div>
+
+    <!-- Modal Dialog for Emergency -->
+    <div class="modal-overlay" id="emergency-modal">
+        <div class="modal-dialog">
+            <h2>EMERGENCY PROTOCOL</h2>
+            <p>Are you sure you want to shut down the VR system?</p>
+            <div class="modal-buttons">
+                <button class="btn" id="cancel-shutdown-btn">CANCEL</button>
+                <button class="btn warning" id="confirm-shutdown-btn">SHUTDOWN</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- DATA ---
+            const appData = {
+                "locations": [
+                    { "name": "School Hallway", "description": "Navigate the familiar halls with interactive lockers and the infamous trophy case.", "features": ["Trophy Case", "Blue Lockers", "Classroom Doors"], "missions": ["Avoid Vince", "Collect Science Fair Info"] },
+                    { "name": "Neighborhood Park", "description": "The outdoor area where shadow beasts first appeared.", "features": ["Playground", "Trees", "Benches"], "missions": ["Escape Shadow Beasts", "Find Hidden Items"] },
+                    { "name": "Zhang's Store", "description": "Ben's family store - a cornerstone of the community.", "features": ["Storefront", "Family Quarters", "Neighborhood View"], "missions": ["Protect the Store", "Help Customers"] },
+                    { "name": "Cassie's House", "description": "Team headquarters in the basement laboratory.", "features": ["Basement Lab", "VR Equipment", "Work Tables"], "missions": ["Equipment Testing", "Project Development"] },
+                    { "name": "The Alley", "description": "Mysterious abandoned lab where secrets hide.", "features": ["Dr. Stevens Lab", "Old Computers", "Research Notes", "Hidden Passages"], "missions": ["Investigate Mystery", "Find Dr. Stevens"] }
+                ],
+                "characters": [
+                    { "name": "Robbie", "role": "Team Leader", "description": "Charismatic dreamer with a snapback hat.", "skills": ["Leadership", "Vision", "Hardware Design"], "backstory": "Haunted by a past science fair accident, he's determined to prove himself and protect his new team.", "avatar": "🧢" },
+                    { "name": "Ben", "role": "Programmer", "description": "Brilliant coder with thick glasses.", "skills": ["Programming", "Logic", "Problem Solving"], "backstory": "Carries the weight of his immigrant family's hopes. Loyal but cautious.", "avatar": "👓" },
+                    { "name": "Cassie", "role": "Physics Expert", "description": "A hidden genius who struggles between her popular-girl facade and her love for science.", "skills": ["Physics", "Quantum Mechanics", "Problem Solving"], "backstory": "Torn between social expectations and her true potential. The first to theorize the dimensional breach.", "avatar": "🔬" },
+                    { "name": "Shelby", "role": "Systems Hacker", "description": "A rebellious spirit with a strong anti-corporate streak and a knack for finding trouble.", "skills": ["Hacking", "Street Smarts", "City Mapping"], "backstory": "Fights against corruption. Her father worked for Bell Communications, giving her a deep distrust of big tech.", "avatar": "🕶️" },
+                    { "name": "Derrick", "role": "Sound Designer", "description": "Musical genius with a unique style, blending reggae and metal.", "skills": ["Music Composition", "Audio Engineering", "Harmonic Resonance"], "backstory": "His unique music accidentally unlocked the HyperRealm Nexus. He now carries the guilt of this discovery.", "avatar": "🎵" },
+                    { "name": "Josie", "role": "Visual Artist", "description": "A talented artist with a warm, empathetic personality who serves as the team's heart.", "skills": ["Digital Art", "3D Modeling", "Visual Design"], "backstory": "Uses her art as an escape from a difficult home life. She is kind and often sees the best in people.", "avatar": "🎨" },
+                    { "name": "Jay", "role": "Hardware Specialist", "description": "Ambitious and highly skilled, but his motivations are complex. He secretly reports to Raymond Rothenberg.", "skills": ["Electronics", "Networking", "Strategy"], "backstory": "Driven by a need to prove himself after his old team abandoned him. Torn between loyalty to the group and the promises of Rothenberg.", "avatar": "⚡" },
+                    { "name": "Vince", "role": "Person of Interest", "description": "The school's notorious bully, now caught in a conflict between his reputation and a desire for redemption.", "skills": ["Intimidation", "Street Fighting", "Survival"], "backstory": "Acts as a hired enforcer to support his mother. After saving the team, he's questioning his path.", "avatar": "👊", "isPOI": true }
+                ],
+                "equipment": [
+                    { "name": "VR Headset", "status": "Modified TV Monitor", "description": "Makeshift display using handheld TV and mirrors." },
+                    { "name": "Haptic Gloves", "status": "Prototype", "description": "Nintendo Power Glove modifications with sensors." },
+                    { "name": "Motion Tracking", "status": "Beam-splitter Array", "description": "Mirror-based tracking system." },
+                    { "name": "Main Computer", "status": "Commodore 64", "description": "Frankenstein setup with multiple components." }
+                ],
+                "missions": [
+                    "Build the Ultimate VR Experience", "Win the Science Fair", "Defeat Corporate Enemies", "Protect the Community", "Uncover Ancient Mysteries"
+                ]
+            };
+
+            // --- STATE ---
+            let currentScreen = 'boot-screen';
+            let currentCharacter = null;
+            let currentLocation = null;
+            const systemWarnings = ['SYSTEM OVERLOAD', 'DIMENSIONAL BREACH', 'FREQUENCY DRIFT', 'CALIBRATION REQUIRED'];
+            const anomalyLog = [];
+            const journalLog = [];
+
+            // --- DOM ELEMENTS ---
+            const screens = {
+                boot: document.getElementById('boot-screen'),
+                hub: document.getElementById('main-hub'),
+                location: document.getElementById('location-view'),
+                character: document.getElementById('character-view')
+            };
+
+            // --- INITIALIZATION ---
+            function initializeApp() {
+                setupEventListeners();
+                startBootSequence();
+            }
+
+            function startBootSequence() {
+                setTimeout(() => {
+                    const prompt = document.getElementById('enter-prompt');
+                    prompt.style.display = 'block';
+                }, 3500);
+            }
+
+            function finishBoot() {
+                // Ensure we only boot once
+                if (currentScreen !== 'boot-screen') return;
+                showScreen('hub');
+                loadMainHub();
+                startSystemEffects();
+            }
+
+            // --- EVENT LISTENERS ---
+            function setupEventListeners() {
+                // Boot sequence for keyboard
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && currentScreen === 'boot-screen') {
+                       finishBoot();
+                    }
+                });
+                // Boot sequence for touch/click
+                screens.boot.addEventListener('click', () => {
+                    if (currentScreen === 'boot-screen' && document.getElementById('enter-prompt').style.display === 'block') {
+                        finishBoot();
+                    }
+                });
+
+                document.querySelectorAll('.nav-tab').forEach(tab => {
+                    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+                });
+                document.getElementById('calibrate-btn').addEventListener('click', calibrateSystem);
+                document.getElementById('emergency-btn').addEventListener('click', () => document.getElementById('emergency-modal').classList.add('active'));
+                document.getElementById('cancel-shutdown-btn').addEventListener('click', () => document.getElementById('emergency-modal').classList.remove('active'));
+                document.getElementById('confirm-shutdown-btn').addEventListener('click', emergencyProtocol);
+                document.getElementById('back-btn-location').addEventListener('click', () => showScreen('hub'));
+                document.getElementById('back-btn-char').addEventListener('click', () => showScreen('hub'));
+                document.getElementById('scan-anomaly-btn').addEventListener('click', generateAnomalyReport);
+                document.getElementById('generate-dialogue-btn').addEventListener('click', generateCharacterDialogue);
+                document.getElementById('generate-journal-btn').addEventListener('click', generateJournalEntry);
+            }
+
+            // --- UI FUNCTIONS ---
+            function showScreen(screenId) {
+                Object.values(screens).forEach(screen => screen.classList.remove('active'));
+                screens[screenId].classList.add('active');
+                currentScreen = screenId;
+            }
+
+            function switchTab(tabName) {
+                document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+                document.querySelector(`.nav-tab[data-tab="${tabName}"]`).classList.add('active');
+                document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+            }
+
+            function loadMainHub() {
+                loadLocations();
+                loadCharacters();
+                loadEquipment();
+                loadMissions();
+            }
+
+            // --- DATA LOADING ---
+            function loadLocations() {
+                const grid = document.getElementById('location-grid');
+                grid.innerHTML = appData.locations.map(location => `
+                    <div class="location-card" data-name="${location.name}">
+                        <div class="interactive-marker">▲</div>
+                        <h3>${location.name}</h3>
+                        <p>${location.description}</p>
+                    </div>
+                `).join('');
+                grid.querySelectorAll('.location-card').forEach(card => {
+                    card.addEventListener('click', () => showLocation(card.dataset.name));
+                });
+            }
+
+            function loadCharacters() {
+                const grid = document.getElementById('character-grid');
+                grid.innerHTML = appData.characters.map(char => `
+                    <div class="character-card ${char.isPOI ? 'person-of-interest' : ''}" data-name="${char.name}">
+                        <div class="character-avatar">${char.avatar}</div>
+                        <h3>${char.name}</h3>
+                        <div class="character-role ${char.isPOI ? 'person-of-interest' : ''}">${char.role}</div>
+                    </div>
+                `).join('');
+                grid.querySelectorAll('.character-card').forEach(card => {
+                    card.addEventListener('click', () => showCharacter(card.dataset.name));
+                });
+            }
+
+            function loadEquipment() {
+                document.getElementById('equipment-list').innerHTML = appData.equipment.map(item => `
+                    <div class="equipment-item">
+                        <div>
+                            <div class="equipment-name">${item.name}</div>
+                            <div class="equipment-description">${item.description}</div>
+                        </div>
+                        <div class="equipment-status">${item.status}</div>
+                    </div>
+                `).join('');
+            }
+
+            function loadMissions() {
+                const list = document.getElementById('mission-list');
+                list.innerHTML = appData.missions.map((mission) => `
+                    <div class="mission-item">
+                        <div class="mission-item-header">
+                            <span class="mission-item-title">${mission}</span>
+                            <button class="btn gemini-btn" data-mission="${mission}">✨ GENERATE BRIEFING</button>
+                        </div>
+                        <div class="generated-content-container" style="display:none;">
+                            <h4>MISSION BRIEFING</h4>
+                            <p class="generated-content"></p>
+                        </div>
+                    </div>
+                `).join('');
+                list.querySelectorAll('.gemini-btn').forEach(button => {
+                    button.addEventListener('click', (e) => generateMissionBriefing(e.target));
+                });
+            }
+
+            // --- DETAIL VIEW FUNCTIONS ---
+            function showLocation(name) {
+                currentLocation = appData.locations.find(l => l.name === name);
+                if (!currentLocation) return;
+                document.getElementById('location-title').textContent = currentLocation.name;
+                document.getElementById('location-description').textContent = currentLocation.description;
+                document.getElementById('location-content-symbol').textContent = getLocationSymbol(currentLocation.name);
+                document.getElementById('location-missions-list').innerHTML = `<h3>MISSIONS HERE:</h3>${currentLocation.missions.map(m => `<div class="mission-item">${m}</div>`).join('')}`;
+                document.getElementById('anomaly-report-container').style.display = 'none';
+                document.getElementById('anomaly-log-content').innerHTML = '';
+                showScreen('location');
+            }
+
+            function showCharacter(name) {
+                currentCharacter = appData.characters.find(c => c.name === name);
+                if (!currentCharacter) return;
+                document.getElementById('character-name').textContent = currentCharacter.name;
+                document.getElementById('character-role-view').textContent = currentCharacter.role;
+                document.getElementById('character-avatar-view').textContent = currentCharacter.avatar;
+                document.getElementById('character-description-view').textContent = currentCharacter.description;
+                document.getElementById('character-skills-view').innerHTML = `<h3>SKILLS:</h3><p>${currentCharacter.skills.join(' • ')}</p>`;
+                document.getElementById('character-backstory-view').innerHTML = `<h3>BACKSTORY:</h3><p>${currentCharacter.backstory}</p>`;
+                
+                const dialogueBtn = document.getElementById('generate-dialogue-btn');
+                dialogueBtn.textContent = currentCharacter.isPOI ? '✨ GENERATE SURVEILLANCE LOG' : '✨ GENERATE COMMS';
+
+                document.getElementById('dialogue-container').style.display = 'none';
+                document.getElementById('dialogue-content').innerHTML = '';
+                showScreen('character');
+            }
+
+            function getLocationSymbol(locationName) {
+                const symbols = { 'School Hallway': '🏫', 'Neighborhood Park': '🌳', "Zhang's Store": '🏪', "Cassie's House": '🏠', 'The Alley': '🔍' };
+                return symbols[locationName] || '?';
+            }
+
+            // --- GEMINI API FUNCTIONS ---
+            async function callGeminiAPI(prompt, button, contentElement, containerElement) {
+                button.disabled = true;
+                button.textContent = 'TRANSMITTING...';
+                if(containerElement) containerElement.style.display = 'block';
+                contentElement.innerHTML = '<span class="cursor"></span>';
+
+                // This is the key change. It checks for a globally provided key,
+                // otherwise it leaves the key blank for the preview environment.
+                const apiKey = typeof __CANVAS_FRAMEWORK_API_KEY !== 'undefined' ? __CANVAS_FRAMEWORK_API_KEY : "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        typewriterEffect(contentElement, text);
+                        return text;
+                    } else {
+                        console.error("Invalid response structure or content blocked:", result);
+                        throw new Error("No valid content received from API.");
+                    }
+                } catch (error) {
+                    console.error("Gemini API call failed:", error);
+                    contentElement.textContent = `// ERROR: FAILED TO RETRIEVE DATA. ${error.message}`;
+                } finally {
+                    button.disabled = false;
+                }
+            }
+            
+            function typewriterEffect(element, text) {
+                element.innerHTML = "";
+                let i = 0;
+                const speed = 15;
+                function type() {
+                    if (i < text.length) {
+                        element.innerHTML += text.charAt(i);
+                        i++;
+                        setTimeout(type, speed);
+                    }
+                }
+                type();
+            }
+
+            function generateMissionBriefing(button) {
+                const mission = button.dataset.mission;
+                const prompt = `You are the AI for 'THE PROJECT', a retro 1980s VR system. Generate a mission briefing for the objective: "${mission}". The tone should be like a classic sci-fi computer terminal: concise, slightly mysterious, and urgent. Mention potential risks and key objectives based on the story of a group of teens fighting interdimensional shadow beasts.`;
+                const missionItem = button.closest('.mission-item');
+                const contentElement = missionItem.querySelector('.generated-content');
+                const containerElement = missionItem.querySelector('.generated-content-container');
+                callGeminiAPI(prompt, button, contentElement, containerElement).finally(() => {
+                    button.textContent = '✨ REGENERATE';
+                });
+            }
+
+            async function generateAnomalyReport() {
+                if (!currentLocation) return;
+                const prompt = `You are the AI for 'THE PROJECT'. Generate a new, unique system anomaly report for the location: "${currentLocation.name}" (${currentLocation.description}). The report should be mysterious, hinting at dimensional breaches, strange energy readings, or sightings of 'Shadow Beasts'. Format it like a system log entry with a timestamp.`;
+                const button = document.getElementById('scan-anomaly-btn');
+                const contentElement = document.getElementById('anomaly-log-content');
+                const containerElement = document.getElementById('anomaly-report-container');
+                const report = await callGeminiAPI(prompt, button, contentElement, containerElement);
+                if(report) {
+                    anomalyLog.push(report);
+                    // For simplicity, we just show the latest. A full log could be built.
+                }
+                button.textContent = '✨ SCAN AGAIN';
+            }
+
+            function generateCharacterDialogue() {
+                if (!currentCharacter) return;
+
+                // Create a clean, readable string for the prompt instead of raw JSON
+                const characterInfo = `Name: ${currentCharacter.name}, Role: ${currentCharacter.role}, Description: ${currentCharacter.description}, Backstory: ${currentCharacter.backstory}`;
+
+                const prompt = currentCharacter.isPOI
+                    ? `You are the AI for 'THE PROJECT'. Generate a surveillance log entry for "Vince". Describe a recent action that shows his internal conflict between being a tough bully and wanting to do the right thing. Mention his isolation and the strange whispers he sometimes hears. Keep it concise and in a report format.`
+                    : `You are the AI for 'THE PROJECT'. Generate a single, characteristic line of dialogue for the following character: ${characterInfo}. The dialogue should reflect their personality, current emotional state from the story (e.g., Robbie's guilt, Derrick's fear, Cassie's determination), and fit a sci-fi adventure theme.`;
+                
+                const button = document.getElementById('generate-dialogue-btn');
+                const contentElement = document.getElementById('dialogue-content');
+                const containerElement = document.getElementById('dialogue-container');
+                const title = containerElement.querySelector('h4');
+                title.textContent = currentCharacter.isPOI ? 'SURVEILLANCE LOG' : 'COMMUNICATION LOG';
+
+                callGeminiAPI(prompt, button, contentElement, containerElement).finally(() => {
+                    button.textContent = currentCharacter.isPOI ? '✨ UPDATE SURVEILLANCE' : '✨ GENERATE NEW COMMS';
+                });
+            }
+            
+            async function generateJournalEntry() {
+                const prompt = `You are an AI reconstructing the lost journal of Dr. Alexander Stevens, a scientist who created a dimensional gateway called the HyperRealm Nexus in the 1980s. Generate a new, previously unseen journal entry. It should be dated before September 1979. The entry should hint at the dangers of the Shadow Beasts, his growing fear of his partner Raymond Rothenberg's ambition, and a clue about the Nexus's mechanics (e.g., sound frequencies, light sensitivity). The tone should be paranoid and scientific.`;
+                const button = document.getElementById('generate-journal-btn');
+                const contentElement = document.createElement('div');
+                contentElement.className = 'log-entry';
+                document.getElementById('journal-log-content').prepend(contentElement);
+                
+                const entry = await callGeminiAPI(prompt, button, contentElement, null);
+                if(entry) {
+                    journalLog.push(entry);
+                }
+                button.textContent = '✨ SEARCH FOR MORE FRAGMENTS';
+            }
+
+            // --- SYSTEM EFFECTS & CONTROLS ---
+            function startSystemEffects() {
+                setInterval(() => {
+                    const freqEl = document.getElementById('frequency');
+                    if (freqEl) freqEl.textContent = (960 + (Math.random() * 10 - 5)).toFixed(1);
+                }, 2000);
+                setInterval(() => { if (Math.random() < 0.3) showSystemWarning(); }, 8000);
+                setInterval(() => {
+                    if (Math.random() < 0.1) {
+                        const overlay = document.getElementById('static-overlay');
+                        overlay.classList.add('active');
+                        setTimeout(() => overlay.classList.remove('active'), 200);
+                    }
+                }, 3000);
+                setInterval(() => { if(Math.random() < 0.15) triggerRaetronAlert(); }, 15000);
+            }
+
+            function showSystemWarning(message = null) {
+                const warningDisplay = document.getElementById('warning-display');
+                if (!warningDisplay) return;
+                const randomWarning = systemWarnings[Math.floor(Math.random() * systemWarnings.length)];
+                warningDisplay.textContent = message || randomWarning;
+                warningDisplay.classList.add('active');
+                setTimeout(() => {
+                    warningDisplay.classList.remove('active');
+                    warningDisplay.textContent = '';
+                }, 3000);
+            }
+
+            function triggerRaetronAlert() {
+                const display = document.getElementById('network-security-display');
+                const status = display.querySelector('span');
+                status.textContent = 'UNAUTHORIZED ACCESS ATTEMPT... RAEtron IP';
+                status.className = 'insecure';
+                setTimeout(() => {
+                    status.textContent = 'SECURE';
+                    status.className = 'secure';
+                }, 4000);
+            }
+
+            function calibrateSystem() {
+                const overlay = document.getElementById('static-overlay');
+                overlay.classList.add('active');
+                showSystemWarning('CALIBRATING...');
+                setTimeout(() => {
+                    overlay.classList.remove('active');
+                    showSystemWarning('CALIBRATION COMPLETE');
+                }, 2000);
+            }
+
+            function emergencyProtocol() {
+                document.getElementById('emergency-modal').classList.remove('active');
+                document.body.innerHTML = `<div id="app-container"><div class="crt-container"><div id="boot-screen" class="screen active"><div class="boot-text"><div class="boot-line">EMERGENCY SHUTDOWN COMPLETE</div><div class="boot-line">VR SYSTEM OFFLINE</div></div></div></div></div>`;
+            }
+
+            // --- START THE APP ---
+            initializeApp();
+        });
+    </script>
+</body>
+</html>
